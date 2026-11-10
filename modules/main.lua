@@ -135,10 +135,25 @@ end
 -- nuke-capable units carry it), so it's left as a standalone match - this
 -- only tightens the ANTIMISSILE side, which is where the false positive
 -- came from.
+--
+-- v8: ANTIMISSILE + SILO still wasn't enough - the UEF and Seraphim cruisers
+-- (UES0202, XSS0202) and the Seraphim carrier (XSS0303) carry both, for
+-- their tactical missile defense plus tactical missile silo. Every real
+-- anti-nuke (UAB/UEB/URB/XSB4302) is a STRUCTURE, so that's required too.
 local function IsNukeOrAntiNuke(unit)
     if IsCommanderUnit(unit) then return false end
     if InCategory(unit, 'NUKE') then return true end
-    return InCategory(unit, 'ANTIMISSILE') and InCategory(unit, 'SILO')
+    return InCategory(unit, 'ANTIMISSILE') and InCategory(unit, 'SILO') and InCategory(unit, 'STRUCTURE')
+end
+
+-- Strategic missile subs and the Seraphim battleship build both nukes and
+-- plain tactical missiles through the same progress bar. Only show their
+-- timer while a nuke is actually queued; a tactical-only build is ignored.
+-- Ground silos (structures) aren't filtered - they only ever build one kind.
+local function IsBuildingWrongMissile(unit, missileInfo)
+    if not InCategory(unit, 'NUKE') or InCategory(unit, 'STRUCTURE') then return false end
+    if not missileInfo then return false end
+    return (missileInfo.nukeSiloBuildCount or 0) <= 0
 end
 
 local function IsTech3Artillery(unit)
@@ -514,6 +529,9 @@ local function RefreshTracker(tracker)
     tracker.missileInfo = missileInfo
     tracker.isNukeSilo = IsNukeOrAntiNuke(unit)
     tracker.fraction = DetectFraction(unit, tracker.isNukeSilo)
+    if IsBuildingWrongMissile(unit, missileInfo) then
+        tracker.fraction = nil
+    end
     UpdateEta(tracker)
     UpdateVisuals(tracker)
 end
