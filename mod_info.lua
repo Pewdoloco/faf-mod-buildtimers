@@ -1,6 +1,6 @@
 name = "BuildTimers"
-uid = "bagfromwalmart-buildtimers-v8"
-version = 8
+uid = "bagfromwalmart-buildtimers-v9"
+version = 9
 copyright = "Copyright (c) 2026 BagFromWalmart, MIT License"
 description = [[Shows time remaining above the unit and percent complete below it, in the
 game's own UI font, plus missiles stored where relevant. Tracks: nuke and
@@ -14,7 +14,7 @@ placing them. UI-only mod: does not touch simulation, safe for ranked.
 AI DISCLOSURE: written with substantial AI assistance (Claude, Anthropic) -
 design, implementation, and debugging. See github.com/Pewdoloco/faf-mod-buildtimers.]]
 author = "BagFromWalmart"
-icon = ""
+icon = "/mods/FAF-BuildTimers/icon.png"
 url = "https://github.com/Pewdoloco/faf-mod-buildtimers"
 selectable = true
 enabled = true

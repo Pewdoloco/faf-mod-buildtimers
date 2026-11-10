@@ -6,6 +6,14 @@
 --   * T3 artillery installation (stationary only): construction time only
 --   * experimental units (any faction): construction time only
 --
+-- v9: units still under construction (e.g. a Paragon being built by
+-- engineers) are now found automatically via what the builders are
+-- working on - see DiscoverNewUnits. Before, they only showed once hovered.
+-- Performance: the 3-second scan now pre-filters the army with one engine
+-- call instead of several Lua checks per unit, labels skip SetText when the
+-- text didn't change, and new labels get an initial position (no more
+-- "circular dependency in lazy evaluation" warnings in the log).
+--
 -- v8 (later): mobile heavy artillery and missile cruisers/carrier no longer
 -- tracked; naval nuke units ignore tactical missile builds.
 --
@@ -451,6 +459,29 @@ local function AttachFrameTracking(tracker, view)
     end
 end
 
+-- Gives a fresh label a position right away and keeps it invisible until
+-- the first OnFrame places it over the unit. Without an initial Left/Top
+-- the engine tries to lay the label out on its own before that, and logs a
+-- "circular dependency in lazy evaluation" warning per label.
+local function InitLabel(label)
+    pcall(label.SetDropShadow, label, true)
+    pcall(label.DisableHitTest, label)
+    pcall(function()
+        label.Left:Set(0)
+        label.Top:Set(0)
+        label:SetAlpha(0)
+    end)
+end
+
+-- SetText re-lays out the label, so skip it when the text hasn't changed
+-- (most poll ticks for a slow build). Returns false if the control is dead.
+local function SetTextIfChanged(label, value)
+    if label._btLastText == value then return true end
+    local ok = pcall(label.SetText, label, value)
+    if ok then label._btLastText = value end
+    return ok
+end
+
 local function EnsureControls(tracker)
     if tracker.control then return true end
     local view = GetView()
@@ -462,21 +493,18 @@ local function EnsureControls(tracker)
     -- reason.
     local textOk, text = pcall(UIUtil.CreateText, view, '', TEXT_SIZE, UIUtil.bodyFont)
     if not textOk then return false end
-    pcall(text.SetDropShadow, text, true)
-    pcall(text.DisableHitTest, text)
+    InitLabel(text)
 
     local missileOk, missileText = pcall(UIUtil.CreateText, view, '', TEXT_SIZE, UIUtil.bodyFont)
     if missileOk then
-        pcall(missileText.SetDropShadow, missileText, true)
-        pcall(missileText.DisableHitTest, missileText)
+        InitLabel(missileText)
     else
         missileText = nil
     end
 
     local percentOk, percentText = pcall(UIUtil.CreateText, view, '', TEXT_SIZE, UIUtil.bodyFont)
     if percentOk then
-        pcall(percentText.SetDropShadow, percentText, true)
-        pcall(percentText.DisableHitTest, percentText)
+        InitLabel(percentText)
     else
         percentText = nil
     end
@@ -502,14 +530,14 @@ end
 local function UpdateVisuals(tracker)
     if not EnsureControls(tracker) then return end
 
-    local ok = pcall(tracker.control.SetText, tracker.control, FormatLabel(tracker) or '')
+    local ok = SetTextIfChanged(tracker.control, FormatLabel(tracker) or '')
     if not ok then
         InvalidateControls(tracker)
         return
     end
 
     if tracker.percentControl then
-        ok = pcall(tracker.percentControl.SetText, tracker.percentControl, FormatPercentLabel(tracker) or '')
+        ok = SetTextIfChanged(tracker.percentControl, FormatPercentLabel(tracker) or '')
         if not ok then
             InvalidateControls(tracker)
             return
@@ -519,7 +547,7 @@ local function UpdateVisuals(tracker)
     if tracker.missileControl then
         local missileLabel = FormatMissileLabel(tracker.missileInfo, tracker.isNukeSilo)
         tracker.hasMissileLabel = missileLabel ~= nil
-        ok = pcall(tracker.missileControl.SetText, tracker.missileControl, missileLabel or '')
+        ok = SetTextIfChanged(tracker.missileControl, missileLabel or '')
         if not ok then
             InvalidateControls(tracker)
             return
@@ -571,16 +599,71 @@ end
 -- the shared `trackers` table for anything not already tracked; the
 -- existing "sticky" loop in PollSelection then keeps refreshing/rendering
 -- and eventually cleans it up, same as a hover-discovered tracker.
+--
+-- v9: selecting ALLUNITS does NOT include structures/units that are still
+-- under construction - an unfinished Paragon only got a label once hovered.
+-- So for every selected unit we also look at what it is working on
+-- (GetFocus: the thing an engineer/factory builds or assists) and one level
+-- further (an engineer assisting another engineer focuses that engineer,
+-- not the building). Same approach as UMT's unit cache.
+local function TryTrackNewUnit(unit)
+    if not IsAlive(unit) or not IsTrackedUnit(unit) then return end
+    local ok, entityId = pcall(unit.GetEntityId, unit)
+    if ok and entityId and not trackers[entityId] then
+        local tracker = NewTracker(unit)
+        trackers[entityId] = tracker
+        RefreshTracker(tracker)
+    end
+end
+
+local function GetFocusOf(unit)
+    if not IsAlive(unit) or not unit.GetFocus then return nil end
+    local ok, focus = pcall(unit.GetFocus, unit)
+    if ok and IsAlive(focus) then return focus end
+    return nil
+end
+
+-- Pre-filters for the discovery scan, so the per-unit Lua checks only run
+-- on the few units that can matter instead of the whole army: one engine
+-- call (EntityCategoryFilterDown) narrows hundreds of units down first.
+-- Built lazily and pcall-guarded; if anything goes wrong the scan simply
+-- falls back to checking every unit, as before.
+local candidateCategory, builderCategory
+local function BuildFilterCategories()
+    if candidateCategory ~= nil then return end
+    local ok1, cand = pcall(function()
+        return categories.EXPERIMENTAL + categories.NUKE
+            + (categories.ANTIMISSILE * categories.SILO * categories.STRUCTURE)
+            + (categories.ARTILLERY * categories.TECH3 * categories.STRUCTURE)
+    end)
+    candidateCategory = ok1 and cand or false
+    -- Everything that can build or assist: engineers, commanders,
+    -- factories, engineering stations, Fatboy...
+    local ok2, builders = pcall(function()
+        return categories.CONSTRUCTION + categories.ENGINEER + categories.FACTORY
+    end)
+    builderCategory = ok2 and builders or false
+end
+
+local function FilterUnits(category, units)
+    if not category then return units end
+    local ok, filtered = pcall(EntityCategoryFilterDown, category, units)
+    if ok and filtered then return filtered end
+    return units
+end
+
 local function DiscoverNewUnits()
+    BuildFilterCategories()
     HiddenSelect(function()
-        for _, unit in GetSelectedUnits() or {} do
-            if IsTrackedUnit(unit) then
-                local ok, entityId = pcall(unit.GetEntityId, unit)
-                if ok and entityId and not trackers[entityId] then
-                    local tracker = NewTracker(unit)
-                    trackers[entityId] = tracker
-                    RefreshTracker(tracker)
-                end
+        local all = GetSelectedUnits() or {}
+        for _, unit in FilterUnits(candidateCategory, all) do
+            TryTrackNewUnit(unit)
+        end
+        for _, unit in FilterUnits(builderCategory, all) do
+            local focus = GetFocusOf(unit)
+            if focus then
+                TryTrackNewUnit(focus)
+                TryTrackNewUnit(GetFocusOf(focus))
             end
         end
     end)
@@ -591,7 +674,10 @@ local function PollSelection()
 
     local selected = GetSelectedUnits()
     if selected then
-        for _, unit in selected do
+        -- A big army selection would otherwise run the per-unit category
+        -- checks on hundreds of units 4 times a second.
+        BuildFilterCategories()
+        for _, unit in FilterUnits(candidateCategory, selected) do
             if IsTrackedUnit(unit) then
                 local ok, entityId = pcall(unit.GetEntityId, unit)
                 if ok and entityId then

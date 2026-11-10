@@ -40,14 +40,19 @@ Stacked above/below the unit, in the game's own UI font:
   starts, while the game is paused, and when progress has stalled (no
   assist, no resources) - instead of a frozen old number.
 - Labels appear automatically on your own units within a few seconds of
-  being placed - no need to select or hover them. Hovering or selecting an
+  being placed, including buildings still under construction (as long as
+  something is building or assisting them) - no need to select or hover
+  them. A foundation nobody is working on shows up once you hover or
+  select it. Hovering or selecting an
   enemy/allied unit under vision shows its label too (handy for scouting).
 
 ## Install
 
 Easiest: find **BuildTimers** in the FAF client's mod vault and install it.
 
-Manual: drop the mod folder (any folder name works) into:
+Manual: drop the `FAF-BuildTimers` folder into the folder below. The mod
+works under any folder name, but the client only finds the preview icon
+if the folder keeps this name.
 
 ```
 Documents\My Games\Gas Powered Games\Supreme Commander Forged Alliance\mods\
@@ -65,7 +70,11 @@ unrank games.
 - Label positions follow the unit every frame; the text (time, percent,
   missile count) refreshes 4 times a second.
 - Every 3 seconds a background scan picks up newly-placed units
-  automatically via a UI-only "hidden select" trick (no sim-mod needed).
+  automatically via a UI-only "hidden select" trick (no sim-mod needed),
+  plus whatever your engineers and factories are currently building.
+- Performance: both the scan and the selection check first narrow the
+  army down with one engine-side category filter, so per-unit Lua work
+  only runs on the handful of units that can actually get a label.
 - The remaining time is averaged over a short sliding window (2.5 s), so it
   stays smooth but still reacts when assist starts or stops.
 
