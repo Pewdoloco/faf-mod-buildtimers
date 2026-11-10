@@ -7,15 +7,21 @@
 > [FAF Vault meta requirements](https://wiki.faforever.com/en/Development/Vault/Rules).
 
 A UI-only mod for [Forged Alliance Forever](https://faforever.com) (Supreme
-Commander: Forged Alliance) that shows a lean countdown over units with a
-reload/charge cycle that's otherwise easy to lose track of:
+Commander: Forged Alliance) that shows a lean countdown over a small set of
+units whose build or missile charge is easy to lose track of.
 
-- Nuke silos
-- Anti-nuke (SMD) silos
-- Seraphim T3 Battleship (their stand-in for a strategic missile sub)
-- T3 strategic missile submarines (UEF/Aeon/Cybran)
-- T3 artillery
-- Experimental units (construction time)
+| Unit | What the timer counts |
+|---|---|
+| Nuke silo (incl. Seraphim experimental nuke) | construction, then each missile build |
+| Anti-nuke (SMD) silo | construction, then each missile build |
+| T3 strategic missile submarine (UEF/Aeon/Cybran) | nuke build only - while a nuke is queued |
+| Seraphim T3 battleship | nuke build only - while a nuke is queued |
+| T3 artillery installation (stationary) | construction only |
+| Experimental units | construction only |
+
+Not tracked: mobile heavy artillery, missile cruisers, carriers, regular
+battleships, tactical missile launchers, commanders. Tactical missile
+builds on subs and the Seraphim battleship are ignored.
 
 ## What it shows
 
@@ -23,22 +29,19 @@ Stacked above/below the unit, in the game's own UI font:
 
 ```
           1:24           <- time remaining (under a minute: 45s)
-          x3              <- missile count (nuke/anti-nuke/naval only)
-       [ unit model ]      <- left clear, no overlay
-           67%             <- percent complete
+          x3             <- missiles stored (nuke/anti-nuke units only)
+       [ unit model ]    <- left clear, no overlay
+           67%           <- percent complete
 ```
 
-If the remaining time can't be estimated yet (e.g. right after a reload
-cycle starts), the time label shows `??:??` instead of disappearing. The
-label only appears while a unit actually has something in progress - for
-the naval nuke launchers (Seraphim battleship, strategic missile subs)
-that means only while a missile build has actually been ordered, since
-those don't auto-reload like a ground silo.
-
-Labels appear automatically on your own qualifying units within a few
-seconds of being placed - no need to select or hover them. Hovering or
-selecting an enemy/allied unit under vision still shows its label too
-(handy for scouting), the same as it always did.
+- The time and percent appear only while something is actually being
+  built. The missile count stays visible on nuke/anti-nuke units.
+- The time shows `??:??` when it can't be estimated: right after a build
+  starts, while the game is paused, and when progress has stalled (no
+  assist, no resources) - instead of a frozen old number.
+- Labels appear automatically on your own units within a few seconds of
+  being placed - no need to select or hover them. Hovering or selecting an
+  enemy/allied unit under vision shows its label too (handy for scouting).
 
 ## Install
 
@@ -59,14 +62,15 @@ unrank games.
 
 ## How it works, briefly
 
-- A slow poll (4x/second) refreshes label text/position; a low-frequency
-  background scan (every few seconds) picks up newly-placed qualifying
-  units automatically via a UI-only "hidden select" trick (no sim-mod
-  needed) - see the comments at the top of `modules/main.lua` for the
-  version history and the reasoning behind each design decision.
-- The remaining-time estimate uses a short sliding averaging window rather
-  than a per-tick instantaneous rate or a whole-cycle average, to stay
-  smooth without drifting when a build stalls and resumes.
+- Label positions follow the unit every frame; the text (time, percent,
+  missile count) refreshes 4 times a second.
+- Every 3 seconds a background scan picks up newly-placed units
+  automatically via a UI-only "hidden select" trick (no sim-mod needed).
+- The remaining time is averaged over a short sliding window (2.5 s), so it
+  stays smooth but still reacts when assist starts or stops.
+
+See the comments at the top of `modules/main.lua` for the version history
+and the reasoning behind each design decision.
 
 ## License
 

@@ -1,10 +1,13 @@
 -- BuildTimers: lean countdown labels for a small, fixed set of units:
---   * nuke silo (incl. Seraphim battleship, which fills that role for
---     Seraphim instead of a T3 strategic missile sub): reload time + count
---   * anti-nuke (SMD) silo: reload time + missile count
---   * T3 strategic missile submarine (UEF/Aeon/Cybran): reload time + count
---   * T3 artillery: reload/build time only (no missile count)
+--   * nuke silo / anti-nuke (SMD) silo: construction time, then missile
+--     build time + missile count
+--   * T3 strategic missile submarine (UEF/Aeon/Cybran) and Seraphim
+--     battleship: nuke build time (only while a nuke is queued) + count
+--   * T3 artillery installation (stationary only): construction time only
 --   * experimental units (any faction): construction time only
+--
+-- v8 (later): mobile heavy artillery and missile cruisers/carrier no longer
+-- tracked; naval nuke units ignore tactical missile builds.
 --
 -- v8: checks IsDestroyed before touching a unit (a silo that died or was
 -- finished between polls used to log a caught "Game object has been
@@ -157,7 +160,9 @@ local function IsBuildingWrongMissile(unit, missileInfo)
 end
 
 local function IsTech3Artillery(unit)
-    return InCategory(unit, 'ARTILLERY') and InCategory(unit, 'TECH3')
+    -- STRUCTURE: only the Heavy Artillery Installation, not the mobile
+    -- heavy artillery bots (UAL/UEL/URL/XSL0304) coming out of a factory.
+    return InCategory(unit, 'ARTILLERY') and InCategory(unit, 'TECH3') and InCategory(unit, 'STRUCTURE')
 end
 
 -- The only unit types this mod tracks at all - checked once up front so
