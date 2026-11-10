@@ -22,7 +22,7 @@ reload/charge cycle that's otherwise easy to lose track of:
 Stacked above/below the unit, in the game's own UI font:
 
 ```
-        ETA 01:24        <- time remaining
+          1:24           <- time remaining (under a minute: 45s)
           x3              <- missile count (nuke/anti-nuke/naval only)
        [ unit model ]      <- left clear, no overlay
            67%             <- percent complete
@@ -42,13 +42,15 @@ selecting an enemy/allied unit under vision still shows its label too
 
 ## Install
 
-Drop the `FAF-BuildTimers` folder into:
+Easiest: find **BuildTimers** in the FAF client's mod vault and install it.
+
+Manual: drop the mod folder (any folder name works) into:
 
 ```
 Documents\My Games\Gas Powered Games\Supreme Commander Forged Alliance\mods\
 ```
 
-Enable it from the FAF client's mod manager.
+Then enable it from the FAF client's mod manager.
 
 ## Safe for ranked
 

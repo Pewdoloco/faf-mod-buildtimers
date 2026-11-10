@@ -6,6 +6,14 @@
 --   * T3 artillery: reload/build time only (no missile count)
 --   * experimental units (any faction): construction time only
 --
+-- v8: checks IsDestroyed before touching a unit (a silo that died or was
+-- finished between polls used to log a caught "Game object has been
+-- destroyed" trace every frame until the next poll), and the entry hook now
+-- finds the mod's folder via __active_mods instead of assuming it's named
+-- faf-buildtimers (vault installs may use a different folder name).
+-- Time label shows "??:??" while the game is paused and when progress has
+-- stalled for a whole averaging window, instead of a frozen old estimate.
+--
 -- v0.7: found in game logs - after a pause/resume (and possibly other
 -- WorldView-recreating events), the engine can destroy a tracker's controls
 -- without telling this mod. Every further Left/Top/SetText/etc. call on
@@ -144,6 +152,13 @@ local function IsTrackedUnit(unit)
     return IsNukeOrAntiNuke(unit) or InCategory(unit, 'EXPERIMENTAL') or IsTech3Artillery(unit)
 end
 
+-- Checked before touching a unit at all. Calling any method on a dead unit
+-- throws "Game object has been destroyed"; pcall catches it, but the engine
+-- still writes a full stack trace to the game log every time.
+local function IsAlive(unit)
+    return unit ~= nil and not IsDestroyed(unit)
+end
+
 local function SafeCall(unit, methodName)
     local method = unit[methodName]
     if not method then return nil end
@@ -254,6 +269,16 @@ local function UpdateEta(tracker)
 
     local now = GetNow()
 
+    -- Game paused: sim time stands still, so the last estimate would just
+    -- freeze on screen. Show "??:??" instead and restart the window, so a
+    -- fresh estimate is built once the game resumes.
+    if SessionIsPaused() then
+        tracker.cycleStartFraction = fraction
+        tracker.cycleStartTime = now
+        tracker.eta = nil
+        return
+    end
+
     -- Real cycle reset: first sample, or fraction dropped back down (a new
     -- build/reload cycle started). The old eta no longer applies at all.
     if tracker.cycleStartFraction == nil or fraction < tracker.cycleStartFraction then
@@ -266,9 +291,13 @@ local function UpdateEta(tracker)
     local elapsed = now - tracker.cycleStartTime
 
     -- Slide the window forward. Keep showing the last computed eta this
-    -- tick rather than blanking it - only an actual cycle reset (above)
-    -- should do that.
+    -- tick rather than blanking it - unless there was no progress at all
+    -- over the whole window (build/reload stalled: no assist, no resources),
+    -- in which case the old estimate is meaningless and "??:??" is shown.
     if elapsed >= ANCHOR_WINDOW then
+        if fraction <= tracker.cycleStartFraction then
+            tracker.eta = nil
+        end
         tracker.cycleStartFraction = fraction
         tracker.cycleStartTime = now
         return
@@ -342,8 +371,11 @@ end
 -- stuck forever since the exception aborted before updating anything.
 local function UpdateFramePosition(tracker, text, missileText, percentText, view)
     local unit = tracker.unit
-    local ok, pos = pcall(unit.GetPosition, unit)
-    local screenPos = ok and pos and view:Project(pos)
+    local screenPos = nil
+    if IsAlive(unit) then
+        local ok, pos = pcall(unit.GetPosition, unit)
+        screenPos = ok and pos and view:Project(pos)
+    end
     if not screenPos or InMinimapZone(screenPos.x, screenPos.y) then
         text:SetAlpha(0)
         if missileText then missileText:SetAlpha(0) end
@@ -477,6 +509,7 @@ end
 
 local function RefreshTracker(tracker)
     local unit = tracker.unit
+    if not IsAlive(unit) then return end
     local missileInfo = GetMissileInfo(unit)
     tracker.missileInfo = missileInfo
     tracker.isNukeSilo = IsNukeOrAntiNuke(unit)
@@ -574,7 +607,8 @@ local function PollSelection()
     for entityId, tracker in trackers do
         if not seen[entityId] then
             local aliveOk, unit = pcall(GetUnitById, entityId)
-            if aliveOk and unit then
+            if aliveOk and IsAlive(unit) then
+                tracker.unit = unit
                 seen[entityId] = true
                 RefreshTracker(tracker)
             end

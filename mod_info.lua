@@ -1,6 +1,6 @@
 name = "BuildTimers"
-uid = "bagfromwalmart-buildtimers-0.1.0"
-version = 7
+uid = "bagfromwalmart-buildtimers-v8"
+version = 8
 copyright = "Copyright (c) 2026 BagFromWalmart, MIT License"
 description = [[Shows a lean countdown (matching the game's own UI font) above nuke/
 anti-nuke silos (incl. Seraphim battleship and T3 strategic missile subs),
